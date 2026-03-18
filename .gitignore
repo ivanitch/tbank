@@ -1,0 +1,18 @@
+# Infrastructure
+__pycache__/
+.poetry/
+.venv/
+.idea/
+
+# Coverage.py
+.coverage
+.coverage.*
+*.cover
+/htmlcov/
+
+# Testing
+/test.py
+
+/.env
+/logs/
+/data/operations_tbank.xlsx
