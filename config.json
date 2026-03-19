@@ -1,0 +1,32 @@
+{
+  "params": {
+    "log_level": "INFO"
+  },
+  "currencies": [
+    "USD",
+    "EUR",
+    "UAH"
+  ],
+  "stocks": [
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "MSFT",
+    "TSLA"
+  ],
+  "api": {
+    "currency": {
+      "url": "https://www.cbr-xml-daily.ru/daily_json.js",
+      "auth": {
+        "enabled": false
+      }
+    },
+    "__comment": "\"stocks\": {\n \"url\": \"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}\",\n \"auth\":{\n\"enabled\":true,\n\"type\": \"query_param\",\n\"param_name\": \"apikey\",\n\"env_key\":\"STOCK_API_KEY\"\n}\n}",
+    "stocks": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+      "auth": {
+        "enabled": false
+      }
+    }
+  }
+}

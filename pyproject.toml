@@ -1,16 +1,20 @@
 [project]
 name = "tbank"
 version = "0.1.0"
-description = ""
+description = "Курсовая работа - приложение для анализа транзакций"
 authors = [
-    {name = "Sergey Ivanov",email = "ivanitch.mail@gmail.com"}
+    { name = "Sergey Ivanov", email = "ivanitch.mail@gmail.com" }
 ]
 readme = "README.md"
 requires-python = ">=3.11"
+
+
 dependencies = [
     "requests (>=2.32.5,<3.0.0)",
     "python-dotenv (>=1.2.2,<2.0.0)",
-    "pandas (>=3.0.1,<4.0.0)"
+    "pandas (>=3.0.1,<4.0.0)",
+    "openpyxl (>=3.1.5,<4.0.0)",
+    "yfinance (>=1.2.0,<2.0.0)",
 ]
 
 
@@ -32,20 +36,13 @@ dev = [
 
 [tool.isort]
 line_length = 119
+profile = "black"
 
 [tool.black]
 line-length = 119
-exclude = '''
-/(
-    \.git
-)/
-'''
+exclude = [".git", "test.py"]
 
 [tool.mypy]
 disallow_untyped_defs = true
 warn_return_any = true
-exclude = [
-    "tests"
-]
-
-
+exclude = ["tests", "test.py"]
