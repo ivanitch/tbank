@@ -1,5 +1,3 @@
-"""Тесты для модулей src.config и src.utils."""
-
 import json
 import os
 from datetime import datetime
