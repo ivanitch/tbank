@@ -1,19 +1,27 @@
 # TBank Finance Analysis
 
-Приложение для анализа личных финансов на основе выгрузки из банковского приложения.
+Приложение для анализа личных финансов на основе выгрузки из TBank.
 
 ## Описание
 
 Проект реализует несколько функциональных блоков:
 
 **Веб-страницы** (`src/views.py`)
-- `get_main_page` — генерирует JSON-ответ для главной страницы: приветствие, данные по картам, топ-5 транзакций, курсы валют, стоимость акций.
+- `get_main_page` — генерирует JSON-ответ для главной страницы: приветствие, данные по картам, топ-5 транзакций, курсы валют, стоимость акций из S&P 500.
 
 **Вспомогательные утилиты** (`src/utils.py`)
-- Парсинг и фильтрация транзакций по дате.
-- Получение курсов валют через [ExchangeRate-API](https://www.exchangerate-api.com/).
-- Получение цен акций через [Alpha Vantage](https://www.alphavantage.co/).
-- Загрузка пользовательских настроек из `user_settings.json`.
+- Фильтрация транзакций по дате.
+- Получение курсов валют — по умолчанию через открытый [API ЦБ РФ](https://www.cbr-xml-daily.ru) (без ключа). Смена источника — только правка `config.json`.
+- Получение цен акций через библиотеку [yfinance](https://github.com/ranaroussi/yfinance) (бесплатно, без ключа).
+- Гибкая авторизация для любого HTTP-провайдера: `query_param`, `header`, `bearer`.
+
+**Конфигурация** (`src/config.py`)
+- `get_path` — построение путей относительно корня проекта.
+- `load_config` — загрузка `config.json`.
+
+**Логирование** (`src/logger.py`)
+- Вывод в консоль и в файл `logs/<name>.log`.
+- Уровень логирования задаётся в `config.json` → `params.log_level`.
 
 ## Структура проекта
 
@@ -21,15 +29,18 @@
 .
 ├── src/
 │   ├── __init__.py
-│   ├── utils.py
-│   ├── main.py
-│   └── views.py
+│   ├── config.py       # пути и загрузка конфига (без внутренних зависимостей)
+│   ├── logger.py       # настройка логирования
+│   ├── utils.py        # бизнес-логика и работа с API
+│   ├── views.py        # генерация JSON-ответов
+│   └── main.py         # точка входа
 ├── data/
 │   └── operations.xlsx
 ├── tests/
 │   ├── __init__.py
 │   ├── test_utils.py
-│   └── test_views.py│
+│   └── test_views.py
+├── logs/               # создаётся автоматически при запуске
 ├── config.json
 ├── .env
 ├── .env_template
@@ -43,28 +54,81 @@
 ## Установка
 
 ```bash
-# Установить зависимости через Poetry
+# Через Poetry
 poetry install
 
 # Или через pip
-pip install pandas openpyxl requests python-dotenv
+pip install pandas openpyxl requests python-dotenv yfinance
 ```
 
 ## Конфигурация
 
-Скопируйте `.env.example` в `.env` и заполните ключи:
+### .env
+
+Скопируйте шаблон и заполните ключи (нужны только если используете платные провайдеры):
 
 ```bash
-cp .env.example .env
+cp .env_template .env
 ```
+
+| Переменная | Описание |
+|---|---|
+| `CURRENCY_API_KEY` | Опционально. Ключ альтернативного провайдера курсов валют. По умолчанию используется ЦБ РФ без ключа |
+
+### config.json
+
+Все настройки приложения — валюты, акции, API-провайдеры:
+
+```json
+{
+  "params": {
+    "log_level": "INFO"
+  },
+  "currencies": ["USD", "EUR", "UAH"],
+  "stocks": ["AAPL", "AMZN", "GOOGL", "MSFT", "TSLA"],
+  "api": {
+    "currency": {
+      "url": "https://www.cbr-xml-daily.ru/daily_json.js",
+      "auth": {
+        "enabled": false,
+        "type": "query_param",
+        "param_name": "apikey",
+        "env_key": "CURRENCY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Смена провайдера курсов валют
+
+Достаточно изменить `config.json` — код не меняется:
+
+```json
+"currency": {
+  "url": "https://v6.exchangerate-api.com/v6",
+  "auth": {
+    "enabled": true,
+    "type": "query_param",
+    "param_name": "apikey",
+    "env_key": "CURRENCY_API_KEY"
+  }
+}
+```
+
+Поддерживаемые типы авторизации (`auth.type`):
+
+| Тип | Как передаётся токен |
+|---|---|
+| `query_param` | `?apikey=TOKEN` |
+| `header` | `X-Api-Key: TOKEN` |
+| `bearer` | `Authorization: Bearer TOKEN` |
 
 ## Запуск
 
 ```bash
-python main
+python -m src.main
 ```
-
----
 
 ## Тестирование
 
@@ -97,11 +161,13 @@ pytest --cov=src --cov-report=term-missing
     }
   ],
   "currency_rates": [
-    {"currency": "USD", "rate": 73.21},
-    {"currency": "EUR", "rate": 87.08}
+    {"currency": "USD", "rate": 90.5},
+    {"currency": "EUR", "rate": 98.3},
+    {"currency": "UAH", "rate": 2.3}
   ],
   "stock_prices": [
-    {"stock": "AAPL", "price": 150.12}
+    {"stock": "AAPL", "price": 150.12},
+    {"stock": "AMZN", "price": 3173.18}
   ]
 }
 ```
@@ -116,6 +182,7 @@ mypy src                  # проверка типов
 ```
 
 Или запустить все линтеры одной командой:
+
 ```bash
 ./lint.sh
 ```
