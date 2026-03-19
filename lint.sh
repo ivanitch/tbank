@@ -4,15 +4,15 @@
 set -e
 
 echo "--- Running flake8 ---"
-flake8 src/ tests/
+flake8 src tests
 
 echo "--- Running black ---"
-black src/ tests/
+black src tests
 
 echo "--- Running isort ---"
-isort src/ tests/
+isort src tests
 
 echo "--- Running mypy ---"
-mypy src/ tests/
+mypy src
 
 echo "--- All checks passed! ---"

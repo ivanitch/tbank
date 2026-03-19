@@ -1,11 +1,12 @@
 """Вспомогательные функции: фильтрация транзакций, получение данных через API."""
-import os
-from datetime import datetime
-from typing import Any, Optional
 
-import yfinance as yf
+import os
+from datetime import datetime, timedelta
+from typing import Any, Callable, Optional
+
 import pandas as pd
 import requests
+import yfinance as yf
 from dotenv import load_dotenv
 
 from src.config import load_config
@@ -15,6 +16,12 @@ load_dotenv()
 
 logger = get_logger(__name__)
 
+# Категории, которые относятся к «Переводам и наличным»
+CASH_AND_TRANSFER_CATEGORIES = {"Наличные", "Переводы"}
+
+# Максимальное количество основных категорий расходов (остальные → «Остальное»)
+TOP_CATEGORIES_LIMIT = 7
+
 
 # ---------------------------------------------------------------------------
 # Работа с транзакциями
@@ -22,9 +29,10 @@ logger = get_logger(__name__)
 
 
 def read_operations(path: str) -> pd.DataFrame:
-    """Читает операции из Excel-файла.
+    """
+    Читает операции из Excel-файла.
 
-    :param path: Путь к Excel-файлу.
+    :arg path: Путь к Excel-файлу.
     :return: DataFrame с данными транзакций.
     """
     logger.info("Чтение операций из %s", path)
@@ -48,6 +56,27 @@ def filter_by_date_range(df: pd.DataFrame, start_date: datetime, end_date: datet
     result = df[mask]
     logger.info("Найдено транзакций в диапазоне: %d", len(result))
     return result
+
+
+def get_date_range(dt: datetime, period: str) -> tuple[datetime, datetime]:
+    """Вычисляет начало диапазона по дате и коду периода.
+
+    :param dt: Опорная дата (конец диапазона).
+    :param period: Код периода — W (неделя), M (месяц), Y (год), ALL (все данные).
+    :return: Кортеж (start_date, end_date).
+    """
+    period = period.upper()
+    if period == "W":
+        start = dt - timedelta(days=dt.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "Y":
+        start = dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == "ALL":
+        start = datetime(1970, 1, 1)
+    else:  # M — по умолчанию
+        start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    logger.info("Период %s: с %s по %s", period, start, dt)
+    return start, dt
 
 
 def get_greeting(dt: datetime) -> str:
@@ -120,6 +149,86 @@ def get_top_transactions(df: pd.DataFrame, top_n: int = 5) -> list[dict[str, Any
 
 
 # ---------------------------------------------------------------------------
+# Функции для страницы «События»
+# ---------------------------------------------------------------------------
+
+
+def get_expenses_data(df: pd.DataFrame) -> dict[str, Any]:
+    """Формирует данные о расходах для страницы «События».
+
+    Возвращает общую сумму, топ-7 категорий (остальные суммируются в «Остальное»)
+    и отдельно категории «Наличные» и «Переводы».
+
+    :param df: Отфильтрованный DataFrame с транзакциями.
+    :return: Словарь с ключами: total_amount, main, transfers_and_cash.
+    """
+    logger.info("Формирование данных о расходах")
+    expenses = df[df["Сумма операции"] < 0].copy()
+    expenses["abs_amount"] = expenses["Сумма операции"].abs()
+
+    total_amount = round(expenses["abs_amount"].sum())
+
+    # Основные категории (без наличных и переводов)
+    main_expenses = expenses[~expenses["Категория"].isin(CASH_AND_TRANSFER_CATEGORIES)]
+    by_category = main_expenses.groupby("Категория")["abs_amount"].sum().sort_values(ascending=False)
+
+    main: list[dict[str, Any]] = []
+    other_sum = 0.0
+    for i, (category, amount) in enumerate(by_category.items()):
+        if i < TOP_CATEGORIES_LIMIT:
+            main.append({"category": category, "amount": round(amount)})
+        else:
+            other_sum += amount
+
+    if other_sum > 0:
+        main.append({"category": "Остальное", "amount": round(other_sum)})
+
+    # Переводы и наличные
+    cash_transfer = expenses[expenses["Категория"].isin(CASH_AND_TRANSFER_CATEGORIES)]
+    transfers_and_cash = (
+        cash_transfer.groupby("Категория")["abs_amount"]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
+        .rename(columns={"Категория": "category", "abs_amount": "amount"})
+        .assign(amount=lambda x: x["amount"].round().astype(int))
+        .to_dict(orient="records")
+    )
+
+    logger.info("Расходы: итого=%d, категорий=%d", total_amount, len(main))
+    return {
+        "total_amount": total_amount,
+        "main": main,
+        "transfers_and_cash": transfers_and_cash,
+    }
+
+
+def get_income_data(df: pd.DataFrame) -> dict[str, Any]:
+    """Формирует данные о поступлениях для страницы «События».
+
+    :param df: Отфильтрованный DataFrame с транзакциями.
+    :return: Словарь с ключами: total_amount, main.
+    """
+    logger.info("Формирование данных о поступлениях")
+    income = df[df["Сумма операции"] > 0].copy()
+
+    total_amount = round(income["Сумма операции"].sum())
+
+    by_category = (
+        income.groupby("Категория")["Сумма операции"]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
+        .rename(columns={"Категория": "category", "Сумма операции": "amount"})
+        .assign(amount=lambda x: x["amount"].round().astype(int))
+        .to_dict(orient="records")
+    )
+
+    logger.info("Поступления: итого=%d, категорий=%d", total_amount, len(by_category))
+    return {"total_amount": total_amount, "main": by_category}
+
+
+# ---------------------------------------------------------------------------
 # Универсальный HTTP-клиент с гибкой авторизацией
 # ---------------------------------------------------------------------------
 
@@ -131,9 +240,6 @@ def _resolve_auth(auth_cfg: dict[str, Any]) -> tuple[dict[str, str], dict[str, s
       - ``query_param`` — токен передаётся как query-параметр (?param_name=token)
       - ``header``      — токен передаётся в HTTP-заголовке (param_name: token)
       - ``bearer``      — токен передаётся как Bearer в заголовке Authorization
-
-    Имя параметра задаётся в ``auth.param_name``.
-    Переменная окружения с токеном задаётся в ``auth.env_key``.
 
     :param auth_cfg: Словарь секции auth из config.json.
     :return: Кортеж (headers, params) для передачи в requests.get.
@@ -179,7 +285,8 @@ def _fetch(url: str, auth_cfg: Optional[dict[str, Any]] = None) -> Optional[dict
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
-        return response.json()
+        result: dict[str, Any] = response.json()
+        return result
     except requests.RequestException as e:
         logger.error("Ошибка HTTP-запроса к %s: %s", url, e)
         return None
@@ -228,7 +335,7 @@ def _parse_exchangerate(data: dict[str, Any], currencies: list[str]) -> list[dic
     return result
 
 
-def _select_currency_parser(data: dict[str, Any]) -> Optional[Any]:
+def _select_currency_parser(data: dict[str, Any]) -> Optional[Callable]:
     """Определяет парсер по структуре ответа провайдера.
 
     :param data: JSON-ответ от провайдера.
@@ -245,8 +352,7 @@ def get_currency_rates(currencies: list[str]) -> list[dict[str, Any]]:
     """Получает курсы валют к рублю согласно настройкам из config.json.
 
     URL, тип авторизации и провайдер задаются в разделе api.currency.
-    Сам токен хранится в .env (имя переменной — в auth.env_key).
-    Смена источника — только правка конфига, код не меняется.
+    Сам токен хранится в .env. Смена источника — только правка конфига.
 
     :param currencies: Список кодов валют, например ['USD', 'EUR', 'UAH'].
     :return: Список словарей с ключами: currency, rate.
@@ -265,11 +371,12 @@ def get_currency_rates(currencies: list[str]) -> list[dict[str, Any]]:
         logger.error("Неизвестный формат ответа от %s", url)
         return []
 
-    return parser(data, currencies)
+    rates: list[dict[str, Any]] = parser(data, currencies)
+    return rates
 
 
 # ---------------------------------------------------------------------------
-# Цены акций — yfinance (официальная Python-библиотека для Yahoo Finance)
+# Цены акций — yfinance
 # ---------------------------------------------------------------------------
 
 
@@ -278,13 +385,12 @@ def get_stock_prices(stocks: list[str]) -> list[dict[str, Any]]:
 
     Использует yfinance вместо прямых HTTP-запросов — библиотека сама управляет
     сессией, куками и задержками, что исключает ошибку 429 Too Many Requests.
-    Список тикеров задаётся в config.json (поле stocks).
 
     :param stocks: Список тикеров акций, например ['AAPL', 'AMZN'].
     :return: Список словарей с ключами: stock, price.
     """
     logger.info("Запрос цен акций через yfinance: %s", stocks)
-    result = []
+    result: list[dict[str, Any]] = []
     for symbol in stocks:
         try:
             ticker = yf.Ticker(symbol)

@@ -2,6 +2,7 @@
 
 Импортирует только из src.config — нет циклических зависимостей.
 """
+
 import logging
 import os
 import sys

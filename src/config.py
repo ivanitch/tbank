@@ -1,10 +1,15 @@
+"""
+Модуль конфигурации и путей
+"""
+
 import json
 import os
 from typing import Any, Optional
 
 
 def get_path(dir_or_file: Optional[str] = None) -> str:
-    """Возвращает абсолютный путь относительно рабочей директории проекта.
+    """
+    Возвращает абсолютный путь относительно рабочей директории проекта.
 
     :arg dir_or_file: Относительный путь к файлу или директории.
         Если не передан — возвращает корень проекта.
@@ -17,7 +22,8 @@ def get_path(dir_or_file: Optional[str] = None) -> str:
 
 
 def load_config(path: Optional[str] = None) -> dict[str, Any]:
-    """Загружает конфигурацию приложения из config.json.
+    """
+    Загружает конфигурацию приложения из config.json.
 
     :arg path: Путь к файлу конфигурации. По умолчанию — config.json в корне проекта.
     :return: Словарь с конфигурацией приложения.
@@ -25,6 +31,7 @@ def load_config(path: Optional[str] = None) -> dict[str, Any]:
     config_path = path or get_path("config.json")
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data: dict[str, Any] = json.load(f)
+            return data
     except (FileNotFoundError, json.JSONDecodeError):
         return {"params": {"log_level": "INFO"}, "currencies": [], "stocks": [], "api": {}}
