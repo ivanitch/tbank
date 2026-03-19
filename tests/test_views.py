@@ -1,10 +1,12 @@
+"""Тесты для модуля src.views."""
+
 import json
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
-from src.views import get_main_page
+from src.views import get_events_page, get_main_page
 
 # ---------------------------------------------------------------------------
 # Фикстуры
@@ -37,17 +39,31 @@ def sample_df() -> pd.DataFrame:
 @pytest.fixture
 def config_file(tmp_path) -> str:
     """Фикстура: временный файл config.json."""
+    import json as _json
+
     config = {
+        "params": {"log_level": "INFO"},
         "currencies": ["USD", "EUR", "UAH"],
         "stocks": ["AAPL", "AMZN"],
+        "api": {
+            "currency": {
+                "url": "https://www.cbr-xml-daily.ru/daily_json.js",
+                "auth": {
+                    "enabled": False,
+                    "type": "query_param",
+                    "param_name": "apikey",
+                    "env_key": "CURRENCY_API_KEY",
+                },
+            }
+        },
     }
     path = tmp_path / "config.json"
-    path.write_text(json.dumps(config), encoding="utf-8")
+    path.write_text(_json.dumps(config), encoding="utf-8")
     return str(path)
 
 
 # ---------------------------------------------------------------------------
-# get_main_page — структура ответа
+# get_main_page
 # ---------------------------------------------------------------------------
 
 
@@ -157,3 +173,123 @@ def test_get_main_page_no_data_for_period(config_file: str) -> None:
             data = json.loads(get_main_page("2021-12-31 20:00:00", empty_df, config_file))
     assert data["cards"] == []
     assert data["top_transactions"] == []
+
+
+# ---------------------------------------------------------------------------
+# get_events_page — структура ответа
+# ---------------------------------------------------------------------------
+
+
+def test_get_events_page_returns_valid_json(sample_df: pd.DataFrame) -> None:
+    """Должна вернуть валидную JSON-строку."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            result = get_events_page(sample_df, "2021-12-31 20:00:00")
+    assert isinstance(json.loads(result), dict)
+
+
+def test_get_events_page_has_required_keys(sample_df: pd.DataFrame) -> None:
+    """JSON-ответ должен содержать ключи: expenses, income, currency_rates, stock_prices."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    for key in ("expenses", "income", "currency_rates", "stock_prices"):
+        assert key in data
+
+
+def test_get_events_page_expenses_structure(sample_df: pd.DataFrame) -> None:
+    """Секция expenses должна содержать total_amount, main, transfers_and_cash."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    expenses = data["expenses"]
+    assert "total_amount" in expenses
+    assert "main" in expenses
+    assert "transfers_and_cash" in expenses
+
+
+def test_get_events_page_income_structure(sample_df: pd.DataFrame) -> None:
+    """Секция income должна содержать total_amount и main."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    income = data["income"]
+    assert "total_amount" in income
+    assert "main" in income
+
+
+def test_get_events_page_expenses_total(sample_df: pd.DataFrame) -> None:
+    """Общая сумма расходов должна быть положительной."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    assert data["expenses"]["total_amount"] > 0
+
+
+def test_get_events_page_income_total(sample_df: pd.DataFrame) -> None:
+    """Общая сумма поступлений должна быть положительной (в данных есть доход 5000)."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    assert data["income"]["total_amount"] == 5000
+
+
+def test_get_events_page_transfers_in_cash_and_transfer(sample_df: pd.DataFrame) -> None:
+    """Категория 'Переводы' должна попасть в transfers_and_cash, а не в main."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    main_categories = {item["category"] for item in data["expenses"]["main"]}
+    cash_categories = {item["category"] for item in data["expenses"]["transfers_and_cash"]}
+    assert "Переводы" not in main_categories
+    assert "Переводы" in cash_categories
+
+
+def test_get_events_page_main_max_categories(sample_df: pd.DataFrame) -> None:
+    """Основных категорий расходов должно быть не более 8 (топ-7 + «Остальное»)."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+    assert len(data["expenses"]["main"]) <= 8
+
+
+@pytest.mark.parametrize("period", ["W", "M", "Y", "ALL"])
+def test_get_events_page_all_periods(sample_df: pd.DataFrame, period: str) -> None:
+    """Страница должна корректно формироваться для всех значений периода."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            result = get_events_page(sample_df, "2021-12-31 20:00:00", period=period)
+    data = json.loads(result)
+    assert "expenses" in data
+    assert "income" in data
+
+
+def test_get_events_page_default_period_is_month(sample_df: pd.DataFrame) -> None:
+    """По умолчанию должен использоваться месячный диапазон."""
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            default = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00"))
+            month = json.loads(get_events_page(sample_df, "2021-12-31 20:00:00", period="M"))
+    assert default["expenses"]["total_amount"] == month["expenses"]["total_amount"]
+
+
+def test_get_events_page_empty_df() -> None:
+    """Должна корректно обработать пустой DataFrame."""
+    empty_df = pd.DataFrame(
+        columns=[
+            "Дата операции",
+            "Номер карты",
+            "Статус",
+            "Сумма операции",
+            "Валюта операции",
+            "Кэшбэк",
+            "Категория",
+            "Описание",
+        ]
+    )
+    with patch("src.views.get_currency_rates", return_value=[]):
+        with patch("src.views.get_stock_prices", return_value=[]):
+            data = json.loads(get_events_page(empty_df, "2021-12-31 20:00:00"))
+    assert data["expenses"]["total_amount"] == 0
+    assert data["expenses"]["main"] == []
+    assert data["income"]["total_amount"] == 0
