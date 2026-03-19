@@ -1,5 +1,3 @@
-"""Тесты для модуля src.views."""
-
 import json
 from unittest.mock import patch
 

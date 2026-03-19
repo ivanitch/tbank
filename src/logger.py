@@ -12,9 +12,10 @@ from src.config import get_path, load_config
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
-    """Создаёт и возвращает настроенный логгер с выводом в файл и консоль.
+    """
+    Создаёт и возвращает настроенный логгер с выводом в файл и консоль.
 
-    :param name: Имя логгера (используется как имя файла лога).
+    :arg name: Имя логгера (используется как имя файла лога).
         Если не передан — используется корневой логгер.
     :return: Настроенный экземпляр logging.Logger.
     """
@@ -26,6 +27,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     if not logger.handlers:
         log_level = load_config().get("params", {}).get("log_level", "INFO").upper()
         logger.setLevel(log_level)
+        logger.propagate = False
 
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 

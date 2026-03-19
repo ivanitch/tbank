@@ -20,11 +20,21 @@
       "auth": {
         "enabled": false
       }
-    },"stocks": {
+    },
+    "stocks": {
       "url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
       "auth": {
         "enabled": false
       }
     }
-  }
+  },
+  "weekday_names": [
+    "Понедельник",
+    "Вторник",
+    "Среда",
+    "Четверг",
+    "Пятница",
+    "Суббота",
+    "Воскресенье"
+  ]
 }
