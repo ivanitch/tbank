@@ -1,23 +1,32 @@
-"""Главный модуль — точка входа для демонстрации всей функциональности проекта."""
 from src.config import get_path
 from src.logger import get_logger
 from src.utils import read_operations
-from src.views import get_main_page
+from src.services import simple_search
+from src.views import get_events_page, get_main_page
+from src.reports import spending_by_weekday
 
 logger = get_logger()
 
 
 def main() -> None:
-    """Запускает демонстрацию всех реализованных функциональностей."""
-    logger.info("Запуск демонстрации приложения")
+    logger.info("🚀 Запуск демонстрации приложения")
 
     df = read_operations(get_path("data/operations.xlsx"))
-
-    # --- Веб-страницы ---
-    print("\n=== Страница «Главная» ===")
     # current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    result = get_main_page("2021-12-31 16:44:00", df)
-    print(result)
+
+    print("\n=== Страница «Главная» ===")
+    print(get_main_page("2021-12-31 16:44:00", df))
+
+    print("\n=== Страница «События» (месяц) ===")
+    print(get_events_page(df, "2021-12-31 16:44:00", period="M"))
+
+    print("\n=== Сервис «Простой поиск» ===")
+    print(simple_search("Лента", df.to_dict(orient="records")))
+
+    print("\n=== Отчёт «Траты по дням недели» ===")
+    print(spending_by_weekday(df, date="2021-12-31"))
+
+    logger.info("⏹️ Демонстрация приложения завершена")
 
 
 if __name__ == "__main__":

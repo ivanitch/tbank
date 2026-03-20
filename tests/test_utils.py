@@ -1,4 +1,3 @@
-"""Тесты для модулей src.config и src.utils."""
 import json
 import os
 from datetime import datetime
@@ -21,7 +20,6 @@ from src.utils import (
     get_top_transactions,
     read_operations,
 )
-
 
 # ---------------------------------------------------------------------------
 # Фикстуры
@@ -62,8 +60,12 @@ def config_file(tmp_path) -> str:
         "api": {
             "currency": {
                 "url": "https://www.cbr-xml-daily.ru/daily_json.js",
-                "auth": {"enabled": False, "type": "query_param", "param_name": "apikey",
-                         "env_key": "CURRENCY_API_KEY"},
+                "auth": {
+                    "enabled": False,
+                    "type": "query_param",
+                    "param_name": "apikey",
+                    "env_key": "CURRENCY_API_KEY",
+                },
             },
             "stocks": {
                 "url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
@@ -158,9 +160,7 @@ def test_load_config_invalid_json(tmp_path) -> None:
         ("header", "X-Api-Key", "X-Api-Key", False),
     ],
 )
-def test_resolve_auth_types(
-        auth_type: str, param_name: str, expected_key: str, in_params: bool, monkeypatch
-) -> None:
+def test_resolve_auth_types(auth_type: str, param_name: str, expected_key: str, in_params: bool, monkeypatch) -> None:
     """Должна корректно строить headers/params для каждого типа авторизации."""
     monkeypatch.setenv("TEST_API_KEY", "secret123")
     auth_cfg = {"enabled": True, "type": auth_type, "param_name": param_name, "env_key": "TEST_API_KEY"}
@@ -214,6 +214,7 @@ def test_fetch_success() -> None:
 def test_fetch_network_error() -> None:
     """Должна вернуть None при сетевой ошибке."""
     import requests as req
+
     with patch("src.utils.requests.get", side_effect=req.RequestException("timeout")):
         assert _fetch("https://example.com") is None
 
@@ -275,30 +276,18 @@ def test_get_greeting(hour: int, expected: str) -> None:
 
 def test_filter_by_date_range_basic(sample_df: pd.DataFrame) -> None:
     """Должна вернуть строки строго в указанном диапазоне."""
-    result = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 15, 23, 59, 59)
-    )
+    result = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 15, 23, 59, 59))
     assert len(result) == 4
 
 
 def test_filter_by_date_range_empty(sample_df: pd.DataFrame) -> None:
     """Должна вернуть пустой DataFrame если нет строк в диапазоне."""
-    assert filter_by_date_range(
-        sample_df,
-        datetime(2022, 1, 1),
-        datetime(2022, 1, 31)
-    ).empty
+    assert filter_by_date_range(sample_df, datetime(2022, 1, 1), datetime(2022, 1, 31)).empty
 
 
 def test_filter_by_date_range_inclusive(sample_df: pd.DataFrame) -> None:
     """Граничные даты должны включаться."""
-    result = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1, 10, 0, 0),
-        datetime(2021, 12, 1, 10, 0, 0)
-    )
+    result = filter_by_date_range(sample_df, datetime(2021, 12, 1, 10, 0, 0), datetime(2021, 12, 1, 10, 0, 0))
     assert len(result) == 1
 
 
@@ -309,33 +298,23 @@ def test_filter_by_date_range_inclusive(sample_df: pd.DataFrame) -> None:
 
 def test_get_cards_info_keys(sample_df: pd.DataFrame) -> None:
     """Каждый словарь карты должен содержать нужные ключи."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
     for card in get_cards_info(filtered):
         assert {"last_digits", "total_spent", "cashback"} <= card.keys()
 
 
 def test_get_cards_info_cashback_formula(sample_df: pd.DataFrame) -> None:
     """Кешбэк должен равняться total_spent / 100."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+
     for card in get_cards_info(filtered):
         assert card["cashback"] == round(card["total_spent"] / 100, 2)
 
 
 def test_get_cards_info_only_expenses(sample_df: pd.DataFrame) -> None:
     """Поступления не должны учитываться в расходах."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+
     for card in get_cards_info(filtered):
         assert card["total_spent"] > 0
 
@@ -347,41 +326,27 @@ def test_get_cards_info_only_expenses(sample_df: pd.DataFrame) -> None:
 
 def test_get_top_transactions_count(sample_df: pd.DataFrame) -> None:
     """Должна вернуть не более top_n транзакций."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1), datetime(2021, 12, 31))
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
     assert len(get_top_transactions(filtered, top_n=3)) <= 3
 
 
 def test_get_top_transactions_sorted(sample_df: pd.DataFrame) -> None:
     """Транзакции должны быть отсортированы по убыванию абсолютной суммы."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
     amounts = [abs(t["amount"]) for t in get_top_transactions(filtered)]
     assert amounts == sorted(amounts, reverse=True)
 
 
 def test_get_top_transactions_keys(sample_df: pd.DataFrame) -> None:
     """Каждая транзакция должна содержать нужные ключи."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
     for tx in get_top_transactions(filtered):
         assert {"date", "amount", "category", "description"} <= tx.keys()
 
 
 def test_get_top_transactions_only_expenses(sample_df: pd.DataFrame) -> None:
     """Топ должен включать только расходы (отрицательные суммы)."""
-    filtered = filter_by_date_range(
-        sample_df,
-        datetime(2021, 12, 1),
-        datetime(2021, 12, 31)
-    )
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
     for tx in get_top_transactions(filtered):
         assert tx["amount"] < 0
 
@@ -437,9 +402,7 @@ def test_parse_exchangerate_zero_rate() -> None:
 def test_get_currency_rates_cbr_success() -> None:
     """Должна вернуть три курса валют при успешном ответе ЦБ РФ."""
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "Valute": {"USD": {"Value": 90.5}, "EUR": {"Value": 98.3}, "UAH": {"Value": 2.3}}
-    }
+    mock_resp.json.return_value = {"Valute": {"USD": {"Value": 90.5}, "EUR": {"Value": 98.3}, "UAH": {"Value": 2.3}}}
     mock_resp.raise_for_status = MagicMock()
     with patch("src.utils.requests.get", return_value=mock_resp):
         result = get_currency_rates(["USD", "EUR", "UAH"])
@@ -459,6 +422,7 @@ def test_get_currency_rates_unknown_format() -> None:
 def test_get_currency_rates_network_error() -> None:
     """Должна вернуть пустой список при ошибке сети."""
     import requests as req
+
     with patch("src.utils.requests.get", side_effect=req.RequestException("timeout")):
         assert get_currency_rates(["USD", "EUR", "UAH"]) == []
 
@@ -518,3 +482,138 @@ def test_read_operations_returns_dataframe(tmp_path) -> None:
     result = read_operations(str(path))
     assert isinstance(result, pd.DataFrame)
     assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# get_date_range
+# ---------------------------------------------------------------------------
+
+
+def test_get_date_range_month() -> None:
+    """Период M должен начинаться с первого числа месяца."""
+    from src.utils import get_date_range
+
+    dt = datetime(2021, 12, 15, 14, 30, 0)
+    start, end = get_date_range(dt, "M")
+    assert start == datetime(2021, 12, 1, 0, 0, 0)
+    assert end == dt
+
+
+def test_get_date_range_week() -> None:
+    """Период W должен начинаться с понедельника текущей недели."""
+    from src.utils import get_date_range
+
+    dt = datetime(2021, 12, 15, 14, 30, 0)  # среда
+    start, end = get_date_range(dt, "W")
+    assert start.weekday() == 0  # понедельник
+    assert end == dt
+
+
+def test_get_date_range_year() -> None:
+    """Период Y должен начинаться с 1 января текущего года."""
+    from src.utils import get_date_range
+
+    dt = datetime(2021, 12, 15)
+    start, end = get_date_range(dt, "Y")
+    assert start == datetime(2021, 1, 1, 0, 0, 0)
+    assert end == dt
+
+
+def test_get_date_range_all() -> None:
+    """Период ALL должен начинаться с 1970-01-01."""
+    from src.utils import get_date_range
+
+    dt = datetime(2021, 12, 15)
+    start, _ = get_date_range(dt, "ALL")
+    assert start == datetime(1970, 1, 1)
+
+
+def test_get_date_range_case_insensitive() -> None:
+    """Код периода должен быть нечувствителен к регистру."""
+    from src.utils import get_date_range
+
+    dt = datetime(2021, 12, 15)
+    start_upper, _ = get_date_range(dt, "M")
+    start_lower, _ = get_date_range(dt, "m")
+    assert start_upper == start_lower
+
+
+# ---------------------------------------------------------------------------
+# get_expenses_data
+# ---------------------------------------------------------------------------
+
+
+def test_get_expenses_data_total(sample_df: pd.DataFrame) -> None:
+    """Общая сумма расходов должна быть суммой всех отрицательных транзакций."""
+    from src.utils import get_expenses_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_expenses_data(filtered)
+    expected = round(abs(sum(x for x in [-500, -1000, -200, 5000, -300, -800, -150] if x < 0)))
+    assert result["total_amount"] == expected
+
+
+def test_get_expenses_data_transfers_separated(sample_df: pd.DataFrame) -> None:
+    """Переводы и наличные не должны попадать в основные категории."""
+    from src.utils import get_expenses_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_expenses_data(filtered)
+    main_cats = {item["category"] for item in result["main"]}
+    assert "Переводы" not in main_cats
+    assert "Наличные" not in main_cats
+
+
+def test_get_expenses_data_has_all_keys(sample_df: pd.DataFrame) -> None:
+    """Результат должен содержать все обязательные ключи."""
+    from src.utils import get_expenses_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_expenses_data(filtered)
+    assert "total_amount" in result
+    assert "main" in result
+    assert "transfers_and_cash" in result
+
+
+def test_get_expenses_data_main_sorted(sample_df: pd.DataFrame) -> None:
+    """Основные категории расходов должны быть отсортированы по убыванию суммы."""
+    from src.utils import get_expenses_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_expenses_data(filtered)
+    amounts = [item["amount"] for item in result["main"] if item["category"] != "Остальное"]
+    assert amounts == sorted(amounts, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# get_income_data
+# ---------------------------------------------------------------------------
+
+
+def test_get_income_data_total(sample_df: pd.DataFrame) -> None:
+    """Общая сумма поступлений должна равняться сумме положительных транзакций."""
+    from src.utils import get_income_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_income_data(filtered)
+    assert result["total_amount"] == 5000
+
+
+def test_get_income_data_has_keys(sample_df: pd.DataFrame) -> None:
+    """Результат должен содержать total_amount и main."""
+    from src.utils import get_income_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_income_data(filtered)
+    assert "total_amount" in result
+    assert "main" in result
+
+
+def test_get_income_data_sorted(sample_df: pd.DataFrame) -> None:
+    """Категории поступлений должны быть отсортированы по убыванию."""
+    from src.utils import get_income_data
+
+    filtered = filter_by_date_range(sample_df, datetime(2021, 12, 1), datetime(2021, 12, 31))
+    result = get_income_data(filtered)
+    amounts = [item["amount"] for item in result["main"]]
+    assert amounts == sorted(amounts, reverse=True)
